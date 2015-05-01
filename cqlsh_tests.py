@@ -530,7 +530,36 @@ VALUES (4, blobAsInt(0x), '', blobAsBigint(0x), 0x, blobAsBoolean(0x), blobAsDec
         # import the CSV file with COPY FROM
         session.execute("TRUNCATE ks.testcopyto")
         node1.run_cqlsh(cmds="COPY ks.testcopyto FROM '%s'" % (tempfile.name,))
-        new_results = list(session.execute("SELECT * FROM testcopyto"))
+        new_results = list(session.execute("SELECT * FROM testcopyfrom"))
+        self.assertEquals(results, new_results)
+
+    def test_copy_from_with_timeouts(self):
+        self.cluster.set_configuration_options(values={'write_request_timeout_in_ms': '2'})
+        self.cluster.populate(2).start()
+        node1, node2, = self.cluster.nodelist()
+
+        session = self.patient_cql_connection(node1)
+        self.create_ks(session, 'ks', 1)
+        session.execute("""
+            CREATE TABLE testcopyfrom (
+                a int,
+                b text,
+                c float,
+                d uuid,
+                PRIMARY KEY (a, b)
+            )""")
+
+        tempfile = NamedTemporaryFile()
+
+        for i in range(10000):
+            tempfile.write("%i,%s,%f,%s" % (i, str(i), float(i) + 0.5, uuid4()))
+
+        results = list(session.execute("SELECT * FROM testcopyfrom"))
+
+        # import the CSV file with COPY FROM
+        session.execute("TRUNCATE ks.testcopyfrom")
+        node1.run_cqlsh(cmds="COPY ks.testcopyfrom FROM '%s'" % (tempfile.name,))
+        new_results = list(session.execute("SELECT * FROM testcopyfrom"))
         self.assertEquals(results, new_results)
 
     def run_cqlsh(self, node, cmds, cqlsh_options=[]):
