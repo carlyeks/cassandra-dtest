@@ -8,7 +8,7 @@ import time
 import unittest
 
 from dtest import Tester, debug, DEFAULT_DIR
-from tools import known_failure
+from jmxutils import JolokiaAgent, make_mbean, remove_perf_disable_shared_mem
 
 JNA_PATH = '/usr/share/java/jna.jar'
 ATTACK_JAR = 'lib/cassandra-attack.jar'
@@ -32,9 +32,6 @@ class ThriftHSHATest(Tester):
         Tester.__init__(self, *args, **kwargs)
 
     @unittest.skipIf(sys.platform == "win32", 'Could not be executed on Windows')
-    @known_failure(failure_source='test',
-                   jira_url='https://issues.apache.org/jira/browse/CASSANDRA-10863',
-                   flaky=True)
     def test_closing_connections(self):
         """
         @jira_ticket CASSANDRA-6546
@@ -49,8 +46,9 @@ class ThriftHSHATest(Tester):
         })
 
         cluster.populate(1)
-        cluster.start(wait_for_binary_proto=True)
         (node1,) = cluster.nodelist()
+        remove_perf_disable_shared_mem(node1)
+        cluster.start(wait_for_binary_proto=True)
 
         session = self.patient_cql_connection(node1)
         self.create_ks(session, 'test', 1)
@@ -62,6 +60,7 @@ class ThriftHSHATest(Tester):
             return pool
 
         pools = []
+        connected_thrift_clients = make_mbean('metrics', type='Client', name='connectedThriftClients')
         for i in xrange(10):
             debug("Creating connection pools..")
             for x in xrange(3):
@@ -72,13 +71,11 @@ class ThriftHSHATest(Tester):
             debug("Closing connections from the client side..")
             for pool in pools:
                 pool.dispose()
-            for i in range(0, 3):
-                stdout = subprocess.Popen(["lsof -a -p %s -iTCP -sTCP:CLOSE_WAIT" % node1.pid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
-                lines = stdout.splitlines()
-                if len(lines) == 0:
-                    break
+
+            with JolokiaAgent(node1) as jmx:
+                num_clients = jmx.read_attribute(connected_thrift_clients, "Value")
                 time.sleep(1)
-            self.assertEqual(len(lines), 0, "There are non-closed connections: %s" % stdout)
+                self.assertEqual(int(num_clients), 0)
 
     @unittest.skipIf(not os.path.exists(ATTACK_JAR), "No attack jar found")
     @unittest.skipIf(not os.path.exists(JNA_PATH), "No JNA jar found")
