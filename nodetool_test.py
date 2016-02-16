@@ -60,6 +60,86 @@ class TestNodetool(Tester):
                                     "Expected rack {} for {} but got {}".format(rack, node.address(), line.rsplit(None, 1)[-1]))
 
     @since('3.4')
+    def test_nodetool_view_build_status(self):
+        """
+        @jira_ticket CASSANDRA-9967
+
+        Test viewbuildstatus
+        """
+
+        cluster = self.cluster
+        cluster.populate([4]).start(wait_for_binary_proto=True)
+        (node1, node2, node3, node4, ) = cluster.nodelist()
+
+        session = self.patient_cql_connection(node1)
+        self.create_ks(session, 'ks', 2)
+
+        with self.assertRaises(NodetoolError):
+            node1.nodetool('viewbuildstatus ks users_by_state')
+
+        session.execute(
+            ("CREATE TABLE users (username varchar, password varchar, gender varchar, "
+             "session_token varchar, state varchar, birth_year bigint, "
+             "PRIMARY KEY (username));")
+        )
+
+        # bring down a few of the nodes to make sure that the view isn't
+        # marked as built right away
+        node2.stop()
+        node4.stop()
+
+        # create a materialized view
+        session.execute(("CREATE MATERIALIZED VIEW users_by_state AS "
+                         "SELECT * FROM users WHERE STATE IS NOT NULL AND username IS NOT NULL "
+                         "PRIMARY KEY (state, username)"))
+
+        with self.assertRaises(NodetoolError):
+            node1.nodetool('viewbuildstatus ks users_by_state')
+
+        node2.start(wait_for_binary_proto=True)
+        node4.start(wait_for_binary_proto=True)
+
+        success = False
+        while not success:
+            try:
+                node1.nodetool('viewbuildstatus ks users_by_state')
+                success = True
+            except NodetoolError:
+                success = False
+
+    @since('3.4')
+    def test_nodetool_view_build_status_single_node(self):
+        """
+        @jira_ticket CASSANDRA-9967
+
+        Ensure that we get the status of the view build even when on a single
+        node
+        """
+
+        cluster = self.cluster
+        cluster.populate([1]).start(wait_for_binary_proto=True)
+        (node1, ) = cluster.nodelist()
+
+        session = self.patient_cql_connection(node1)
+        self.create_ks(session, 'ks', 1)
+
+        with self.assertRaises(NodetoolError):
+            node1.nodetool('viewbuildstatus ks users_by_state')
+
+        session.execute(
+            ("CREATE TABLE users (username varchar, password varchar, gender varchar, "
+             "session_token varchar, state varchar, birth_year bigint, "
+             "PRIMARY KEY (username));")
+        )
+
+        # create a materialized view
+        session.execute(("CREATE MATERIALIZED VIEW users_by_state AS "
+                         "SELECT * FROM users WHERE STATE IS NOT NULL AND username IS NOT NULL "
+                         "PRIMARY KEY (state, username)"))
+
+        node1.nodetool('viewbuildstatus ks users_by_state')
+                
+    @since('3.4')
     def test_nodetool_timeout_commands(self):
         """
         @jira_ticket CASSANDRA-10953
