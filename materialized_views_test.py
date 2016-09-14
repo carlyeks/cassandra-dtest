@@ -1522,10 +1522,6 @@ class TestMaterializedViewsConsistency(Tester):
         for row in data:
             self.rows[(row.a, row.b)] = row.c
 
-    @known_failure(failure_source='cassandra',
-                   jira_url='https://issues.apache.org/jira/browse/CASSANDRA-11290',
-                   flaky=True)
-    @skip('awaiting CASSANDRA-11290')
     def single_partition_consistent_reads_after_write_test(self):
         """
         Tests consistency of multiple writes to a single partition
