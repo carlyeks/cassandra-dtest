@@ -1830,28 +1830,6 @@ class CqlshSmokeTest(Tester):
         self.node1.run_cqlsh('TRUNCATE ks.test;')
         self.assertEqual([], rows_to_list(self.session.execute('SELECT * from test')))
 
-    def test_alter_table(self):
-        create_ks(self.session, 'ks', 1, )
-        create_cf(self.session, 'test', columns={'i': 'ascii'})
-
-        def get_ks_columns():
-            table = self.session.cluster.metadata.keyspaces['ks'].tables['test']
-
-            return [[table.name, column.name, column.cql_type] for column in table.columns.values()]
-
-        old_column_spec = [u'test', u'i',
-                           u'ascii']
-        self.assertIn(old_column_spec, get_ks_columns())
-
-        self.node1.run_cqlsh('ALTER TABLE ks.test ALTER i TYPE text;')
-        self.session.cluster.refresh_table_metadata("ks", "test")
-
-        new_columns = get_ks_columns()
-        self.assertNotIn(old_column_spec, new_columns)
-        self.assertIn([u'test', u'i',
-                       u'text'],
-                      new_columns)
-
     def test_use_keyspace(self):
         # ks1 contains ks1table, ks2 contains ks2table
         create_ks(self.session, 'ks1', 1)

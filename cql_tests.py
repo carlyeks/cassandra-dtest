@@ -599,8 +599,6 @@ class MiscellaneousCQLTester(CQLTester):
         - ALTER the table, adding a column
         - assert prepared statement without that column in it still works
         - assert prepared statement containing that column also still works
-        - ALTER the table, changing the type of a column
-        - assert that both prepared statements still work
         """
         session = self.prepare()
 
@@ -625,15 +623,6 @@ class MiscellaneousCQLTester(CQLTester):
         self.assertEqual(result, [(0, 0, 0, None)])
 
         explicit_prepared = session.prepare("SELECT k, a, b, d FROM test")
-
-        # when the type is altered, both statements will need to be re-prepared
-        # by the driver, but the re-preparation should succeed
-        session.execute("ALTER TABLE test ALTER d TYPE blob")
-        result = session.execute(wildcard_prepared.bind(None))
-        self.assertEqual(result, [(0, 0, 0, None)])
-
-        result = session.execute(explicit_prepared.bind(None))
-        self.assertEqual(result, [(0, 0, 0, None)])
 
     def range_slice_test(self):
         """
